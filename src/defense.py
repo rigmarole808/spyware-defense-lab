@@ -9,7 +9,27 @@ This module provides security functions for:
 """
 
 import os
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Set
+
+
+# Default safe targets that are always allowed
+DEFAULT_SAFE_TARGETS = {"127.0.0.1", "localhost", "::1"}
+
+
+def _get_allowed_targets() -> Set[str]:
+    """
+    Get the set of allowed targets from environment variables and defaults.
+    
+    Returns:
+        Set of allowed target strings
+    """
+    allowed = set(DEFAULT_SAFE_TARGETS)
+    
+    env_targets = os.environ.get("ALLOWED_TARGETS", "")
+    if env_targets:
+        allowed.update(t.strip() for t in env_targets.split(",") if t.strip())
+    
+    return allowed
 
 
 def is_allowed_target(target: str) -> bool:
@@ -22,6 +42,7 @@ def is_allowed_target(target: str) -> bool:
     Returns:
         True if the target is allowed, False otherwise
     """
+    # Only check explicit allowed list from environment
     allowed_targets = os.environ.get("ALLOWED_TARGETS", "")
     if not allowed_targets:
         return False
@@ -42,8 +63,13 @@ def redact_sensitive(data: Dict[str, Any]) -> Dict[str, Any]:
     """
     redacted = data.copy()
     
-    # Remove API keys and other sensitive fields
-    sensitive_keys = ["api_key", "password", "secret", "token"]
+    # Get sensitive keys from environment or use defaults
+    env_sensitive_keys = os.environ.get("SENSITIVE_KEYS", "")
+    if env_sensitive_keys:
+        sensitive_keys = [k.strip() for k in env_sensitive_keys.split(",") if k.strip()]
+    else:
+        # Default sensitive fields
+        sensitive_keys = ["api_key", "password", "secret", "token"]
     
     for key in sensitive_keys:
         if key in redacted:
@@ -62,16 +88,9 @@ def stub_scan_network(target: str) -> Dict[str, Any]:
     Returns:
         Dictionary with scan results or error
     """
-    # Default safe targets
-    default_safe_targets = ["127.0.0.1", "localhost", "::1"]
+    allowed_targets = _get_allowed_targets()
     
-    # Check if target is explicitly allowed or is a default safe target
-    allowed_targets = os.environ.get("ALLOWED_TARGETS", "")
-    if allowed_targets:
-        allowed_list = [t.strip() for t in allowed_targets.split(",")]
-        if target not in allowed_list and target not in default_safe_targets:
-            return {"error": "Target not in allowed list"}
-    elif target not in default_safe_targets:
+    if target not in allowed_targets:
         return {"error": "Target not in allowed list"}
     
     # Stub implementation - returns mock data
